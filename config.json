@@ -1,0 +1,9 @@
+{
+    "results_folder": "./results",
+    "subtitle_language": "pt-BR",
+    "transcription_language": "pt",
+    "default_video_resolution": "1080p",
+    "whisper_model": "base",
+    "audio_quality": "192",
+    "show_progress": true
+}
