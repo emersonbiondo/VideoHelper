@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from .config import AppConfig
-from .downloader import YouTubeDownloader
+from .stream_downloader  import StreamDownloader
 from .transcriber import WhisperTranscriber
 from .exceptions import DownloadError, TranscriptionError
 
@@ -21,7 +21,7 @@ class VideoProcessor:
             config (AppConfig): The application configuration object.
         """
         self._config = config
-        self._downloader = YouTubeDownloader(config)
+        self.stream_downloader = StreamDownloader(config)
         self._transcriber: Optional[WhisperTranscriber] = None
     
     def _get_transcriber(self) -> WhisperTranscriber:
