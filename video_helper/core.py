@@ -1,99 +1,83 @@
 import logging
 from pathlib import Path
 from typing import Optional
+
 from .config import AppConfig
-from .stream_downloader  import StreamDownloader
+from .stream_downloader import StreamDownloader
+from .local_processor import LocalFileProcessor
 from .transcriber import WhisperTranscriber
-from .exceptions import DownloadError, TranscriptionError
 
 logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     """
-    Orchestrates the process of downloading and transcribing video content.
+    A facade or orchestrator class that simplifies interactions with various
+    components of the application (downloaders, local file processors, transcribers).
+    [PT-BR] Uma classe de fachada ou orquestradora que simplifica interações com vários
+    componentes da aplicação (baixadores, processadores de arquivos locais, transcribers).
     """
 
     def __init__(self, config: AppConfig):
         """
-        Initializes the VideoProcessor with dependency injection.
+        Initializes the processor with application settings and creates
+        instances of the dependent services.
+        [PT-BR] Inicializa o processador com as configurações da aplicação e cria
+        instâncias dos serviços dependentes.
 
         Args:
             config (AppConfig): The application configuration object.
+            [PT-BR] O objeto de configuração da aplicação.
         """
         self._config = config
-        self.stream_downloader = StreamDownloader(config)
-        self._transcriber: Optional[WhisperTranscriber] = None
-    
-    def _get_transcriber(self) -> WhisperTranscriber:
-        """
-        Lazily loads the WhisperTranscriber instance.
-        This follows a form of the Singleton pattern (for the transcriber instance)
-        and ensures the model is only loaded if needed.
-        """
-        if self._transcriber is None:
-            self._transcriber = WhisperTranscriber(self._config)
-        return self._transcriber
+        self._downloader = StreamDownloader(config)
+        self._local_processor = LocalFileProcessor(config)
+        self._transcriber = WhisperTranscriber(config)
 
     def download_video(self, url: str, resolution: str) -> Path:
         """
-        Downloads a video at a specified resolution.
-        
-        Args:
-            url (str): The URL of the YouTube video.
-            resolution (str): The desired resolution (e.g., '1080p', '720p').
-        
-        Returns:
-            Path: The path to the downloaded video file.
+        Downloads a video from a given URL with a specific resolution.
+        [PT-BR] Baixa um vídeo de uma URL dada com uma resolução específica.
         """
         return self._downloader.download_video(url, resolution)
 
     def download_audio(self, url: str) -> Path:
         """
-        Downloads the audio from a video.
-        
-        Args:
-            url (str): The URL of the YouTube video.
-            
-        Returns:
-            Path: The path to the downloaded audio file.
+        Downloads the audio stream from a video URL.
+        [PT-BR] Baixa o fluxo de áudio de uma URL de vídeo.
         """
         return self._downloader.download_audio(url)
 
     def download_subtitles(self, url: str, language: str) -> Optional[Path]:
         """
-        Downloads the subtitles for a video.
-        
-        Args:
-            url (str): The URL of the YouTube video.
-            language (str): The desired language code.
-            
-        Returns:
-            Optional[Path]: The path to the subtitles file, or None if not found.
+        Downloads the subtitles for a video URL in a specific language.
+        [PT-BR] Baixa as legendas para uma URL de vídeo em um idioma específico.
         """
         return self._downloader.download_subtitles(url, language)
 
-    def transcribe_audio(self, audio_path: Path) -> Path:
+    def extract_audio_from_local_file(self, file_path: Path) -> Path:
         """
-        Transcribes the audio from a file. If subtitles are available, it uses them;
-        otherwise, it performs a full transcription.
-
-        Args:
-            audio_path (Path): The path to the audio file.
-        
-        Returns:
-            Path: The path to the transcribed text file.
-        
-        Raises:
-            TranscriptionError: If transcription fails.
+        Extracts audio from a local video file.
+        [PT-BR] Extrai áudio de um arquivo de vídeo local.
         """
-        transcriber = self._get_transcriber()
-        transcribed_text = transcriber.transcribe_audio(audio_path)
+        return self._local_processor.extract_audio(file_path)
+    
+    def transcribe(self, audio_path: Path) -> str:
+        """
+        Transcribes the given audio file using Whisper.
+        [PT-BR] Transcreve o arquivo de áudio fornecido usando o Whisper.
+        """
+        return self._transcriber.transcribe_audio(audio_path)
 
-        # Save transcription to a .txt file
-        txt_path = audio_path.with_suffix(".txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(transcribed_text)
-        
-        logger.info(f"📝 [EN] Transcription saved to: {txt_path} - [PT-BR] Transcrição salva em: {txt_path}")
-        
-        return txt_path
+    def generate_srt(self, audio_path: Path) -> Path:
+        """
+        Generates an SRT file from an audio file.
+        [PT-BR] Gera um arquivo SRT a partir de um arquivo de áudio.
+        """
+        return self._transcriber.generate_srt_from_audio(audio_path)
+    
+    def convert_vtt_to_srt(self, vtt_path: Path) -> Path:
+        """
+        Converts a VTT subtitle file to SRT format.
+        [PT-BR] Converte um arquivo de legenda VTT para o formato SRT.
+        """
+        return self._transcriber.convert_vtt_to_srt(vtt_path)

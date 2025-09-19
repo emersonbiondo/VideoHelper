@@ -10,7 +10,7 @@ from .exceptions import DownloadError
 logger = logging.getLogger(__name__)
 console = Console()
 
-class YouTubeDownloader:
+class StreamDownloader:
     """
     Handles downloading subtitles, audio, and video from YouTube videos.
     Encapsulates all interactions with the yt-dlp library.
@@ -18,7 +18,7 @@ class YouTubeDownloader:
 
     def __init__(self, config: AppConfig):
         """
-        Initializes the YouTubeDownloader with application settings.
+        Initializes the StreamDownloader with application settings.
 
         Args:
             config (AppConfig): The application configuration object.

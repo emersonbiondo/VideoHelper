@@ -1,198 +1,200 @@
 import argparse
 import logging
 import sys
-import mimetypes
-import shlex
 from pathlib import Path
-from rich.console import Console
+from typing import Callable, Optional
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from video_helper.config import settings
+from video_helper.config import load_config
 from video_helper.core import VideoProcessor
-from video_helper.local_processor import LocalFileProcessor
-from video_helper.transcriber import WhisperTranscriber
 from video_helper.exceptions import DownloadError, TranscriptionError
 
+# Configure basic logging to the console
+# [PT-BR] Configura o logging básico para o console
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
-console = Console()
 
-def execute_action(action: str, current_input: str, args: argparse.Namespace):
-    is_url = current_input.startswith(('http://', 'https://'))
-    input_path = Path(current_input)
+def get_input_path(input_arg: str, processor: VideoProcessor) -> Optional[Path]:
+    """
+    Determines if the input is a URL or a local file and handles accordingly.
+    [PT-BR] Determina se a entrada é uma URL ou um arquivo local e lida com isso.
     
-    console.print(f"\n[cyan]⚙️ [EN] Processing input: {current_input} - [PT-BR] Processando entrada: {current_input}[/cyan]\n")
-
+    Args:
+        input_arg (str): The input string (URL or file path).
+        processor (VideoProcessor): The VideoProcessor instance.
+    
+    Returns:
+        Optional[Path]: Path to the local file, or None if the input is a URL.
+    """
     try:
-        if action == "video":
-            if not is_url:
-                console.print("❌ [red][EN] Action 'video' only supports YouTube URLs. - [PT-BR] Ação 'video' suporta apenas URLs do YouTube.[/red]")
-                return
-            processor = VideoProcessor(settings)
-            file_path = processor.download_video(current_input, args.resolution)
-            console.print(f"🎥 [green][EN] Video file saved at: {file_path} - [PT-BR] Arquivo de vídeo salvo em: {file_path}[/green]")
-        
-        elif action == "audio":
-            if is_url:
-                processor = VideoProcessor(settings)
-                file_path = processor.download_audio(current_input)
-            else:
-                local_processor = LocalFileProcessor(settings)
-                file_path = local_processor.extract_audio(input_path)
-            console.print(f"🎧 [green][EN] Audio file saved at: {file_path} - [PT-BR] Arquivo de áudio salvo em: {file_path}[/green]")
-        
-        elif action == "subtitles":
-            if not is_url:
-                console.print("❌ [red][EN] Action 'subtitles' only supports YouTube URLs. - [PT-BR] Ação 'subtitles' suporta apenas URLs do YouTube.[/red]")
-                return
-            processor = VideoProcessor(settings)
-            file_path = processor.download_subtitles(current_input, args.language)
-            if file_path:
-                console.print(f"📜 [green][EN] Subtitle file saved at: {file_path} - [PT-BR] Arquivo de legenda salvo em: {file_path}[/green]")
-            else:
-                console.print(f"⚠️ [yellow][EN] No subtitles found for the specified language. - [PT-BR] Nenhuma legenda encontrada para o idioma especificado.[/yellow]")
-        
-        elif action in ["transcribe", "srt"]:
-            transcriber = WhisperTranscriber(settings)
-            
-            if action == "srt":
-                if not is_url and input_path.suffix.lower() == ".vtt":
-                    srt_path = transcriber.convert_vtt_to_srt(input_path)
-                    console.print(f"📜 [green][EN] Converted VTT to SRT: {srt_path} - [PT-BR] VTT convertido para SRT: {srt_path}[/green]")
-                    return
-            
-            audio_path = None
-            if is_url:
-                processor = VideoProcessor(settings)
-                transcription_language = args.language if args.language != settings.subtitle_language else settings.transcription_language
-                
-                if action == "transcribe" and not args.force:
-                    console.print(f"🟡 [yellow][EN] First, trying to download subtitles for URL: {current_input} in '{transcription_language}'... - [PT-BR] Primeiro, tentando baixar legendas para a URL: {current_input} em '{transcription_language}'...[/yellow]")
-                    subtitle_path = processor.download_subtitles(current_input, transcription_language)
-                    if subtitle_path:
-                        console.print(f"✅ [green][EN] Subtitles were found and saved at: {subtitle_path} - [PT-BR] Legendas foram encontradas e salvas em: {subtitle_path}[/green]")
-                        return
+        input_path = Path(input_arg)
+        if input_path.exists():
+            return input_path
+    except:
+        pass  # It's not a valid local path, so we assume it's a URL.
+    return None
 
-                console.print(f"⚠️ [yellow][EN] No subtitles found or transcription was forced. Proceeding with audio transcription... - [PT-BR] Nenhuma legenda encontrada ou a transcrição foi forçada. Prosseguindo com a transcrição do áudio...[/yellow]")
-                audio_path = processor.download_audio(current_input)
-            
-            else:
-                local_processor = LocalFileProcessor(settings)
-                mime_type, _ = mimetypes.guess_type(input_path)
-                
-                if mime_type and mime_type.startswith('audio/'):
-                    console.print(f"🟡 [yellow][EN] Input is an audio file. Using it directly... - [PT-BR] A entrada é um arquivo de áudio. Usando-o diretamente...[/yellow]")
-                    audio_path = input_path
-                else:
-                    audio_path = local_processor.extract_audio(input_path)
-            
-            if action == "transcribe":
-                transcribed_text = transcriber.transcribe_audio(audio_path)
-                txt_path = audio_path.with_suffix(".txt")
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(transcribed_text)
-                console.print(f"📝 [green][EN] Transcription saved to: {txt_path} - [PT-BR] Transcrição salva em: {txt_path}[/green]")
-            elif action == "srt":
-                srt_path = transcriber.generate_srt_from_audio(audio_path)
-                console.print(f"📜 [green][EN] SRT file saved to: {srt_path} - [PT-BR] Arquivo SRT salvo em: {srt_path}[/green]")
+def process_single_input(action_func: Callable, input_arg: str, processor: VideoProcessor, **kwargs):
+    """
+    Handles a single input (URL or local file) for a given action.
+    [PT-BR] Lida com uma única entrada (URL ou arquivo local) para uma dada ação.
+    
+    Args:
+        action_func (Callable): The function to execute (e.g., download_video, transcribe).
+        input_arg (str): The input string.
+        processor (VideoProcessor): The VideoProcessor instance.
+        **kwargs: Additional arguments for the action function.
+    """
+    logger.info(f"⚙️ [EN] Processing input: {input_arg} - [PT-BR] Processando entrada: {input_arg}")
+    
+    local_path = get_input_path(input_arg, processor)
+    
+    try:
+        if local_path:
+            logger.info(f"📁 [EN] Input identified as local file. - [PT-BR] Entrada identificada como arquivo local.")
+            action_func(local_path, **kwargs)
+        else:
+            logger.info(f"🔗 [EN] Input identified as URL. - [PT-BR] Entrada identificada como URL.")
+            action_func(input_arg, **kwargs)
         
+        logger.info(f"✅ [EN] Processing finished for: {input_arg} - [PT-BR] Processamento concluído para: {input_arg}")
+
     except (DownloadError, TranscriptionError, FileNotFoundError) as e:
-        console.print(f"❌ [red][EN] An error occurred while processing '{current_input}': {e} - [PT-BR] Um erro ocorreu ao processar '{current_input}': {e}[/red]")
-    except Exception as e:
-        console.print(f"❌ [red][EN] An unexpected error occurred while processing '{current_input}': {e} - [PT-BR] Um erro inesperado ocorreu ao processar '{current_input}': {e}[/red]")
+        logger.error(f"❌ [EN] An error occurred while processing '{input_arg}': {e} - [PT-BR] Um erro ocorreu ao processar '{input_arg}': {e}")
+        # We do not re-raise the error here so that the 'auto' command can continue
+        # [PT-BR] Não relançamos o erro aqui para que o comando 'auto' possa continuar
 
-def run():
-    parser = argparse.ArgumentParser(
-        description="A utility to download YouTube videos, audio, subtitles, or transcribe audio."
-    )
-    
-    parser.add_argument(
-        "action",
-        choices=["video", "audio", "subtitles", "transcribe", "srt", "auto"],
-        help="[EN] Action to perform: 'video', 'audio', 'subtitles', 'transcribe', 'srt', or 'auto' - [PT-BR] Ação a ser executada: 'video', 'audio', 'subtitles', 'transcribe', 'srt' ou 'auto'"
-    )
-    parser.add_argument(
-        "input", 
-        help="[EN] URL of the YouTube video, a local file path, or a path to a list file - [PT-BR] URL do vídeo do YouTube, um caminho de arquivo local, ou um caminho para um arquivo de lista"
-    )
+def main():
+    """Main function to run the CLI application."""
+    config = load_config()
+    processor = VideoProcessor(config)
 
-    parser.add_argument(
-        "--resolution",
-        default=settings.default_video_resolution, 
-        help=f"[EN] Video resolution to download (e.g., '1080p', '720p', '480p'). - [PT-BR] Resolução do vídeo para download (ex: '1080p', '720p', '480p'). Padrão: {settings.default_video_resolution}"
-    )
-    parser.add_argument(
-        "--language",
-        default=settings.subtitle_language, 
-        help=f"[EN] Subtitle language (default: {settings.subtitle_language}). - [PT-BR] Idioma da legenda (padrão: {settings.subtitle_language})."
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="[EN] Force audio transcription even if subtitles are found. - [PT-BR] Força a transcrição do áudio mesmo que legendas sejam encontradas."
-    )
+    parser = argparse.ArgumentParser(description="Video and audio processing tool.")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # ----- `video` command -----
+    video_parser = subparsers.add_parser("video", help="Downloads a video from a URL.")
+    video_parser.add_argument("input", help="URL of the video to download.")
+    video_parser.add_argument("--resolution", default=config.default_video_resolution, help="Video resolution (e.g., '1080p').")
+
+    # ----- `audio` command -----
+    audio_parser = subparsers.add_parser("audio", help="Downloads audio from a URL or extracts it from a local video file.")
+    audio_parser.add_argument("input", help="URL of the video or path to the local video file.")
     
+    # ----- `subtitles` command -----
+    subtitles_parser = subparsers.add_parser("subtitles", help="Downloads subtitles from a URL.")
+    subtitles_parser.add_argument("input", help="URL of the video.")
+    subtitles_parser.add_argument("--language", default=config.subtitle_language, help="Subtitle language (e.g., 'pt').")
+    
+    # ----- `transcribe` command -----
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribes audio from a URL or local file to a text (.txt) file.")
+    transcribe_parser.add_argument("input", help="URL of the video or path to the audio file.")
+
+    # ----- `srt` command -----
+    srt_parser = subparsers.add_parser("srt", help="Generates an SRT file from a URL or local file, or converts a VTT file to SRT.")
+    srt_parser.add_argument("input", help="URL of the video, path to a local audio/video file, or path to a VTT subtitle file.")
+
+    # ----- `auto` command -----
+    auto_parser = subparsers.add_parser("auto", help="Executes multiple commands from a text file.")
+    auto_parser.add_argument("file_path", help="Path to the text file containing commands.")
+
     args = parser.parse_args()
 
-    if args.action == "auto":
-        input_path = Path(args.input)
-        if not input_path.is_file() or input_path.suffix.lower() != ".txt":
-            console.print("❌ [red][EN] Action 'auto' requires a valid .txt file path. - [PT-BR] Ação 'auto' requer um caminho de arquivo .txt válido.[/red]")
-            sys.exit(1)
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    try:
+        # Use a dictionary to map commands to their respective functions and arguments
+        # [PT-BR] Usa um dicionário para mapear comandos às suas funções e argumentos
+        handlers = {
+            "video": lambda: processor.download_video(args.input, args.resolution),
+            "audio": lambda: (
+                processor.download_audio(args.input) if not get_input_path(args.input, processor)
+                else processor.extract_audio_from_local_file(get_input_path(args.input, processor))
+            ),
+            "subtitles": lambda: processor.download_subtitles(args.input, args.language),
+            "transcribe": lambda: (
+                processor.transcribe(processor.download_audio(args.input)) if not get_input_path(args.input, processor)
+                else processor.transcribe(get_input_path(args.input, processor))
+            ),
+            "srt": lambda: (
+                processor.convert_vtt_to_srt(get_input_path(args.input, processor)) if str(get_input_path(args.input, processor)).endswith(".vtt")
+                else (
+                    processor.generate_srt(processor.download_audio(args.input)) if not get_input_path(args.input, processor)
+                    else processor.generate_srt(get_input_path(args.input, processor))
+                )
+            ),
+            "auto": lambda: process_auto_file(args.file_path, processor)
+        }
         
-        try:
-            with open(input_path, "r", encoding="utf-8") as f:
-                commands = [line.strip() for line in f if line.strip()]
-            if not commands:
-                console.print("❌ [red][EN] The command file is empty. - [PT-BR] O arquivo de comandos está vazio.[/red]")
-                sys.exit(1)
+        # We process the 'auto' command differently since it needs to read a file
+        # [PT-BR] Processamos o comando 'auto' de forma diferente, já que ele precisa ler um arquivo
+        if args.command in handlers:
+            if args.command != "auto":
+                handlers[args.command]()
+            else:
+                process_auto_file(args.file_path, processor)
+        
+    except (DownloadError, TranscriptionError, FileNotFoundError) as e:
+        logger.error(f"❌ [EN] An error occurred: {e} - [PT-BR] Um erro ocorreu: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"❌ [EN] An unexpected error occurred: {e} - [PT-BR] Um erro inesperado ocorreu: {e}")
+        sys.exit(1)
+
+def process_auto_file(file_path: str, processor: VideoProcessor):
+    """
+    Reads a file with commands and executes them in sequence.
+    [PT-BR] Lê um arquivo com comandos e os executa em sequência.
+    """
+    logger.info(f"📝 [EN] Starting batch processing from file: {file_path} - [PT-BR] Iniciando processamento em lote a partir do arquivo: {file_path}")
+    
+    auto_file_path = Path(file_path)
+    if not auto_file_path.exists():
+        raise FileNotFoundError(f"[EN] File not found: {file_path} - [PT-BR] Arquivo não encontrado: {file_path}")
+    
+    with open(auto_file_path, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
             
-            for command_line in commands:
-                try:
-                    command_parts = shlex.split(command_line)
-                    command_action = command_parts[0]
-                    command_input = command_parts[1]
-                    
-                    auto_args = argparse.Namespace(
-                        action=command_action,
-                        input=command_input,
-                        resolution=args.resolution,
-                        language=args.language,
-                        force=args.force
+            parts = line.split()
+            command = parts[0]
+            input_arg = parts[1]
+            extra_args = parts[2:]
+            
+            # Map command strings to a simple function handler
+            # [PT-BR] Mapeia strings de comando para um manipulador de função simples
+            handlers = {
+                "video": lambda i: processor.download_video(i, extra_args[1] if len(extra_args) > 1 else processor._config.default_video_resolution),
+                "audio": lambda i: (
+                    processor.download_audio(i) if not get_input_path(i, processor)
+                    else processor.extract_audio_from_local_file(get_input_path(i, processor))
+                ),
+                "subtitles": lambda i: processor.download_subtitles(i, extra_args[1] if len(extra_args) > 1 else processor._config.subtitle_language),
+                "transcribe": lambda i: (
+                    processor.transcribe(processor.download_audio(i)) if not get_input_path(i, processor)
+                    else processor.transcribe(get_input_path(i, processor))
+                ),
+                "srt": lambda i: (
+                    processor.convert_vtt_to_srt(get_input_path(i, processor)) if str(get_input_path(i, processor)).endswith(".vtt")
+                    else (
+                        processor.generate_srt(processor.download_audio(i)) if not get_input_path(i, processor)
+                        else processor.generate_srt(get_input_path(i, processor))
                     )
-                    
-                    execute_action(auto_args.action, auto_args.input, auto_args)
-                
-                except IndexError:
-                    console.print(f"⚠️ [yellow][EN] Skipping invalid command format: '{command_line}'. - [PT-BR] Ignorando formato de comando inválido: '{command_line}'.[/yellow]")
-                    continue
-        except FileNotFoundError:
-            console.print(f"❌ [red][EN] The command file '{args.input}' was not found. - [PT-BR] O arquivo de comando '{args.input}' não foi encontrado.[/red]")
-            sys.exit(1)
+                ),
+            }
 
-    else:
-        inputs_to_process = []
-        if Path(args.input).is_file() and Path(args.input).suffix.lower() == ".txt":
-            try:
-                with open(Path(args.input), "r", encoding="utf-8") as f:
-                    inputs_to_process = [line.strip() for line in f if line.strip()]
-                if not inputs_to_process:
-                    console.print("❌ [red][EN] The input list file is empty or could not be read. - [PT-BR] O arquivo de lista de entrada está vazio ou não pôde ser lido.[/red]")
-                    sys.exit(1)
-            except FileNotFoundError:
-                console.print(f"❌ [red][EN] The list file '{args.input}' was not found. - [PT-BR] O arquivo de lista '{args.input}' não foi encontrado.[/red]")
-                sys.exit(1)
-        else:
-            inputs_to_process.append(args.input)
-
-        for current_input in inputs_to_process:
-            execute_action(args.action, current_input, args)
-
+            if command in handlers:
+                logger.info(f"▶️ [EN] Executing command '{command}' for '{input_arg}'... - [PT-BR] Executando comando '{command}' para '{input_arg}'...")
+                handlers[command](input_arg)
+            else:
+                logger.warning(f"⚠️ [EN] Skipping unknown command on line {line_num}: '{command}' - [PT-BR] Ignorando comando desconhecido na linha {line_num}: '{command}'")
 
 if __name__ == "__main__":
-    run()
+    main()
