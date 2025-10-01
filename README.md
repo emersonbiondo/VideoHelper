@@ -27,20 +27,51 @@ Antes de usar o **VideoHelper**, você precisa garantir que todas as dependênci
     ```
 3.  **Instale o FFmpeg:** O FFmpeg é um requisito fundamental para o download e a conversão de áudio/vídeo. Siga as instruções no [site oficial do FFmpeg](https://ffmpeg.org/download.html) para instalá-lo no seu sistema operacional e certifique-se de que ele está no seu PATH.
 
+## 🛠️ Configuração Avançada
+
+Todas as configurações da aplicação são gerenciadas através do arquivo **`config.json`** na raiz do projeto.
+
+### Uso Opcional de Cookies
+
+A sua aplicação suporta o uso opcional de um arquivo de cookies para contornar restrições de download em sites como Facebook ou Instagram, ou quando o YouTube impõe o erro `403: Forbidden`.
+
+* **Como Obter o Arquivo de Cookies:**
+    1.  Instale a extensão de navegador **"Get cookies.txt locally"** (Chrome Web Store).
+    2.  Navegue até o site desejado (Ex: Instagram, Facebook) enquanto estiver logado.
+    3.  Clique no ícone da extensão e **exporte o arquivo no formato Netscape**.
+    4.  Salve esse arquivo como `cookies.txt` (ou o nome que preferir) na raiz do seu projeto.
+* **Para usar cookies:** Preencha o campo `"cookies_file_path"` com o caminho válido do seu arquivo (Ex: `"./cookies.txt"`).
+* **Para não usar cookies:** Mantenha o campo como `"cookies_file_path": null`. A aplicação continuará funcionando normalmente para links públicos.
+
+**Exemplo de `config.json`:**
+
+```json
+{
+    "results_folder": "./results",
+    "subtitle_language": "en",
+    "transcription_language": "pt",
+    "default_video_resolution": "1080p",
+    "whisper_model": "base",
+    "audio_quality": "192",
+    "show_progress": true,
+    "cookies_file_path": "./cookies.txt" 
+}
+```
+
 ## 📖 Como Usar
 
 A sintaxe de uso do **VideoHelper** é simples e intuitiva, seguindo o padrão `python main.py <ação> <entrada>`. A entrada pode ser uma URL do YouTube, um caminho de arquivo local ou um arquivo de lista de texto.
 
 ### Ações Disponíveis
 
-| Ação       | Descrição                                                              | Exemplo de Uso                                                                  |
-|------------|------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `video`    | Baixa um vídeo do YouTube em uma resolução específica.                 | `python main.py video https://youtu.be/meu_video`                               |
-| `audio`    | Baixa o áudio de uma URL ou extrai o áudio de um arquivo local.        | `python main.py audio https://youtu.be/meu_audio`                               |
-| `subtitles`| Baixa legendas de um vídeo do YouTube.                                 | `python main.py subtitles https://youtu.be/minha_legenda`                       |
-| `transcribe`| Transcreve áudio para texto plano (`.txt`).                            | `python main.py transcribe https://youtu.be/meu_audio`                          |
-| `srt`      | Gera uma legenda com marcações de tempo (`.srt`) a partir de áudio ou converte um `.vtt` local. | `python main.py srt https://youtu.be/minha_legenda`                             |
-| **`auto`** | **Processa uma lista de comandos a partir de um arquivo de texto.** | **`python main.py auto lista_de_comandos.txt`** |
+| Ação        | Descrição                                                                                       | Exemplo de Uso                                                                  |
+|-------------|-------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `video`     | Baixa um vídeo do YouTube em uma resolução específica.                                          | `python main.py video https://youtu.be/meu_video`                               |
+| `audio`     | Baixa o áudio de uma URL ou extrai o áudio de um arquivo local.                                 | `python main.py audio https://youtu.be/meu_audio`                               |
+| `subtitles` | Baixa legendas de um vídeo do YouTube.                                                          | `python main.py subtitles https://youtu.be/minha_legenda`                       |
+| `transcribe`| Transcreve áudio para texto plano (`.txt`).                                                     | `python main.py transcribe https://youtu.be/meu_audio`                          |
+| `srt`       | Gera uma legenda com marcações de tempo (`.srt`) a partir de áudio ou converte um `.vtt` local. | `python main.py srt https://youtu.be/minha_legenda`                             |
+| `auto`      | Processa uma lista de comandos a partir de um arquivo de texto.                                 | `python main.py auto lista_de_comandos.txt`                                     |
 
 ### Exemplos Detalhados
 

@@ -4,14 +4,14 @@ from dataclasses import dataclass
 from typing import Optional
 
 # Define o caminho para o arquivo de configuração
-# Define the path to the configuration file
+# [PT-BR] Define o caminho para o arquivo de configuração
 CONFIG_FILE_PATH = Path("./config.json")
 
 @dataclass
 class AppConfig:
     """
     Application configuration settings.
-    Stores application-wide settings in a simple dataclass.
+    [PT-BR] Configurações da aplicação.
     """
     results_folder: Path
     subtitle_language: str
@@ -19,19 +19,12 @@ class AppConfig:
     default_video_resolution: str
     whisper_model: str
     audio_quality: str
-    show_progress: bool # <-- Novo campo
+    show_progress: bool
+    cookies_file_path: Optional[Path] = None
 
 def load_config() -> AppConfig:
-    """
-    Loads configuration from the config.json file.
-
-    Returns:
-        AppConfig: The application configuration object.
-    
-    Raises:
-        FileNotFoundError: If the config.json file is not found.
-        json.JSONDecodeError: If the config.json file is invalid.
-    """
+    # ... (código de load_config mantido, mas com a lógica de Path/None para cookies)
+    # A lógica de carregamento precisa garantir que 'null' no JSON se torne None em Python
     if not CONFIG_FILE_PATH.exists():
         raise FileNotFoundError(f"[EN] Configuration file not found at: {CONFIG_FILE_PATH} - [PT-BR] Arquivo de configuração não encontrado em: {CONFIG_FILE_PATH}")
     
@@ -40,11 +33,15 @@ def load_config() -> AppConfig:
             config_data = json.load(f)
         
         # Converte o caminho para um objeto Path
-        # Convert the path to a Path object
         config_data['results_folder'] = Path(config_data.get("results_folder", "./results"))
         
-        # Garante que o diretório de resultados existe
-        # Ensure the results folder exists
+        # Trata o campo de cookies (converte string para Path ou mantém None/null)
+        cookies_path_str = config_data.get("cookies_file_path")
+        if cookies_path_str and cookies_path_str.strip().lower() != "null":
+             config_data['cookies_file_path'] = Path(cookies_path_str)
+        else:
+             config_data['cookies_file_path'] = None
+
         config_data['results_folder'].mkdir(parents=True, exist_ok=True)
         
         return AppConfig(**config_data)
@@ -53,6 +50,4 @@ def load_config() -> AppConfig:
     except Exception as e:
         raise Exception(f"[EN] Failed to load application configuration: {e} - [PT-BR] Falha ao carregar a configuração da aplicação: {e}")
 
-# Instancia a configuração ao carregar o módulo
-# Instantiate the configuration upon module loading
 settings = load_config()
